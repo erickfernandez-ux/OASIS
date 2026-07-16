@@ -1,0 +1,74 @@
+name: oasis
+description: "OASIS — Personal Operating System"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+
+  # Navigation
+  go_router: ^13.0.0
+
+  # Backend
+  supabase_flutter: ^2.0.0
+
+  # Typography
+  google_fonts: ^6.1.0
+
+  # Domain utilities
+  equatable: ^2.0.8
+  uuid: ^4.2.2
+
+  # Utilities
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
+  path_provider: ^2.1.4
+  shared_preferences: ^2.3.2
+  flutter_local_notifications: ^17.2.3
+  timezone: ^0.9.4
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  cryptography: ^2.7.0
+  flutter_secure_storage: ^9.2.4
+  local_auth: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/backgrounds/
+    - assets/images/
+    - assets/icons/
+    - assets/logos/
+
+# Prepared for future icon generation with existing brand assets.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  web:
+    generate: true
+    image_path: assets/logos/oasis_icon.png
+    background_color: "#FFF9F0"
+    theme_color: "#7EA08B"
+  windows:
+    generate: true
+    image_path: assets/logos/oasis_icon.png
+    icon_size: 48
+  macos:
+    generate: true
+    image_path: assets/logos/oasis_icon.png
+  image_path: assets/logos/oasis_icon.png
+  remove_alpha_ios: true

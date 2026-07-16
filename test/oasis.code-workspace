@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		}
+	],
+	"settings": {
+		"chat.tools.terminal.autoApprove": {
+			"flutter": true,
+			"&": true
+		},
+		"java.compile.nullAnalysis.mode": "automatic"
+	}
+}
