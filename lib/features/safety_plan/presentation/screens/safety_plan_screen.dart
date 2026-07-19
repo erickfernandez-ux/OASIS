@@ -192,6 +192,7 @@ class _SafetyPlanScreenState extends ConsumerState<SafetyPlanScreen> {
                         phone: _contactPhoneController.text,
                         message: _contactMessageController.text,
                       );
+                  if (!mounted) return;
                   _contactNameController.clear();
                   _contactRelationshipController.clear();
                   _contactPhoneController.clear();
@@ -233,6 +234,7 @@ class _SafetyPlanScreenState extends ConsumerState<SafetyPlanScreen> {
                         role: _professionalRoleController.text,
                         phone: _professionalPhoneController.text,
                       );
+                  if (!mounted) return;
                   _professionalNameController.clear();
                   _professionalRoleController.clear();
                   _professionalPhoneController.clear();
@@ -270,6 +272,7 @@ class _SafetyPlanScreenState extends ConsumerState<SafetyPlanScreen> {
                   await ref
                       .read(safetyPlanControllerProvider.notifier)
                       .addReason(_reasonController.text);
+                  if (!mounted) return;
                   _reasonController.clear();
                 },
               ),

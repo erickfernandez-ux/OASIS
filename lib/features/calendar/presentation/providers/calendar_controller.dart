@@ -182,6 +182,8 @@ class CalendarController extends AsyncNotifier<CalendarState> {
     String? description,
     String? location,
     String? color,
+    bool isRecurring = false,
+    String? recurrenceRuleId,
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
@@ -193,6 +195,8 @@ class CalendarController extends AsyncNotifier<CalendarState> {
         description: description,
         location: location,
         color: color,
+        isRecurring: isRecurring,
+        recurrenceRuleId: recurrenceRuleId,
       );
       _prepareEventNotificationDraft(created);
       return _loadState();
@@ -207,6 +211,8 @@ class CalendarController extends AsyncNotifier<CalendarState> {
     DateTime? endDateTime,
     String? location,
     String? color,
+    bool? isRecurring,
+    String? recurrenceRuleId,
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
@@ -219,6 +225,8 @@ class CalendarController extends AsyncNotifier<CalendarState> {
         endDateTime: endDateTime ?? current.endDateTime,
         location: location ?? current.location,
         color: color ?? current.color,
+        isRecurring: isRecurring ?? current.isRecurring,
+        recurrenceRuleId: recurrenceRuleId ?? current.recurrenceRuleId,
       );
       final updateEvent = ref.read(updateEventProvider);
       final updatedEvent = await updateEvent(updated);

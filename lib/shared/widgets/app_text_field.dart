@@ -49,6 +49,8 @@ class AppTextField extends StatelessWidget {
       readOnly: readOnly,
       onTap: onTap,
       maxLines: maxLines,
+      validator: validator,
+      errorText: errorText,
     );
   }
 }

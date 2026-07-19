@@ -44,6 +44,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
@@ -57,18 +58,7 @@ flutter:
 # Prepared for future icon generation with existing brand assets.
 flutter_launcher_icons:
   android: true
-  ios: true
-  web:
-    generate: true
-    image_path: assets/logos/oasis_icon.png
-    background_color: "#FFF9F0"
-    theme_color: "#7EA08B"
-  windows:
-    generate: true
-    image_path: assets/logos/oasis_icon.png
-    icon_size: 48
-  macos:
-    generate: true
-    image_path: assets/logos/oasis_icon.png
+  ios: false
   image_path: assets/logos/oasis_icon.png
-  remove_alpha_ios: true
+  adaptive_icon_foreground: assets/logos/oasis_icon.png
+  adaptive_icon_background: "#FFF9F0"

@@ -5,7 +5,7 @@ import 'package:oasis/core/theme/app_theme.dart';
 import 'package:oasis/features/home/presentation/screens/home_screen.dart';
 
 void main() {
-  testWidgets('HomeScreen renders dashboard content and upcoming tasks',
+  testWidgets('HomeScreen renders redesigned dashboard sections',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -19,22 +19,15 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    const greetings = <String>[
-      '🌅 Buenos días.',
-      '☀ Buenas tardes.',
-      '🌙 Buenas noches.',
-      '🌅 Buenos días, Erick.',
-      '☀ Buenas tardes, Erick.',
-      '🌙 Buenas noches, Erick.',
-    ];
-
-    expect(
-      greetings.any((greeting) => find.text(greeting).evaluate().isNotEmpty),
-      isTrue,
-    );
-    expect(find.text('Hoy'), findsOneWidget);
-    expect(find.text('Resumen del día'), findsOneWidget);
-    expect(find.text('Próximas tareas'), findsOneWidget);
-    expect(find.textContaining('Revisar'), findsOneWidget);
+    expect(find.text('🌿 Buenos días, Erick'), findsOneWidget);
+    expect(find.text('✨ Captura rápida'), findsOneWidget);
+    expect(find.text('Nueva nota'), findsOneWidget);
+    expect(find.text('Nueva tarea'), findsOneWidget);
+    expect(find.text('Nueva cita'), findsOneWidget);
+    expect(find.text('Registrar estado'), findsOneWidget);
+    expect(find.text('Medicación'), findsOneWidget);
+    expect(find.text('Agenda del día'), findsOneWidget);
+    expect(find.text('Hidratación'), findsOneWidget);
+    expect(find.text('Estado emocional'), findsOneWidget);
   });
 }

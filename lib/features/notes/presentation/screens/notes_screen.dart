@@ -65,11 +65,23 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
       body: notesState.when(
         data: (state) =>
             _buildContent(context, state, colors, spacing, typography),
-        loading: () => const Center(
-          child: LoadingIndicator(type: LoadingType.breathingPaper),
+        loading: () => _buildNotesScaffoldState(
+          const Center(
+            child: LoadingIndicator(type: LoadingType.breathingPaper),
+          ),
         ),
-        error: (error, _) => Center(child: Text(error.toString())),
+        error: (error, _) => _buildNotesScaffoldState(
+          Center(child: Text(error.toString())),
+        ),
       ),
+    );
+  }
+
+  Widget _buildNotesScaffoldState(Widget child) {
+    return OasisWatercolorBackground(
+      accent: OasisSurfaces.notesAccent,
+      backgroundAssetOverride: 'assets/backgrounds/papel.webp',
+      child: SafeArea(child: child),
     );
   }
 

@@ -4,6 +4,7 @@ enum AppLaunchIntent {
   openCalendarNewEvent,
   openAgendaCalendarNewEvent,
   openAgendaTasksNewTask,
+  openAgendaRemindersNewReminder,
   openNotesNewNote,
 }
 

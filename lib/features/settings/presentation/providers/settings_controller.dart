@@ -65,14 +65,21 @@ class SettingsController extends AsyncNotifier<UserSettings> {
   }
 
   Future<void> setPreferredName(String name) async {
-    state = await AsyncValue.guard(() async {
-      final current = state.value;
-      if (current == null) return _fetchSettings();
+    final normalizedName = name.trim();
+    final current = state.valueOrNull ?? await _fetchSettings();
 
+    if (normalizedName.isEmpty) {
+      state = AsyncData(current);
+      return;
+    }
+
+    final result = await AsyncValue.guard(() async {
       final updateSettings = ref.read(updateSettingsProvider);
-      await updateSettings(current.copyWith(preferredName: name.trim()));
+      await updateSettings(current.copyWith(preferredName: normalizedName));
       return _fetchSettings();
     });
+
+    state = result.hasError ? AsyncData(current) : result;
   }
 
   Future<void> completeOnboarding() async {

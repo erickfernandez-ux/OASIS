@@ -36,6 +36,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   DateTime _end = DateTime.now().add(const Duration(hours: 1));
   EventType _type = EventType.personal;
   String _eventColor = '#7EA08B';
+  bool _eventIsRecurring = false;
+  String? _eventRecurrenceRuleId;
   Event? _editingEvent;
   static const Map<String, Color> _palette = {
     '#7EA08B': Color(0xFF7EA08B),
@@ -59,6 +61,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final intent = ref.read(appLaunchIntentProvider);
       if (intent == AppLaunchIntent.openCalendarNewEvent) {
         ref.read(appLaunchIntentProvider.notifier).state = null;
@@ -81,11 +84,22 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       body: state.when(
         data: (calendarState) =>
             _buildContent(context, calendarState, colors, spacing, typography),
-        loading: () => const Center(
-          child: LoadingIndicator(type: LoadingType.breathingPaper),
+        loading: () => _buildCalendarScaffoldState(
+          const Center(
+            child: LoadingIndicator(type: LoadingType.breathingPaper),
+          ),
         ),
-        error: (error, _) => Center(child: Text(error.toString())),
+        error: (error, _) => _buildCalendarScaffoldState(
+          Center(child: Text(error.toString())),
+        ),
       ),
+    );
+  }
+
+  Widget _buildCalendarScaffoldState(Widget child) {
+    return OasisWatercolorBackground(
+      accent: OasisSurfaces.calendarAccent,
+      child: SafeArea(child: child),
     );
   }
 
@@ -540,6 +554,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     _endController.text = DateFormat('dd/MM/yyyy HH:mm').format(_end);
     _type = event?.type ?? EventType.personal;
     _eventColor = event?.color ?? '#7EA08B';
+    _eventIsRecurring = event?.isRecurring ?? false;
+    _eventRecurrenceRuleId = event?.recurrenceRuleId ?? 'weekly';
+    if (!_eventIsRecurring) {
+      _eventRecurrenceRuleId = null;
+    }
 
     showDialog(
       context: context,
@@ -691,6 +710,44 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                         setState(() => _type = value ?? EventType.personal),
                   ),
                   SizedBox(height: context.appSpacing.md),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: _eventIsRecurring,
+                    title: const Text('Repetir evento'),
+                    subtitle: const Text('Activa una frecuencia fija para este evento'),
+                    onChanged: (value) {
+                      setState(() {
+                        _eventIsRecurring = value;
+                        if (!_eventIsRecurring) {
+                          _eventRecurrenceRuleId = null;
+                        } else {
+                          _eventRecurrenceRuleId ??= 'weekly';
+                        }
+                      });
+                    },
+                  ),
+                  if (_eventIsRecurring) ...[
+                    SizedBox(height: context.appSpacing.xs),
+                    DropdownButtonFormField<String>(
+                      initialValue: _eventRecurrenceRuleId ?? 'weekly',
+                      decoration: const InputDecoration(
+                        labelText: 'Frecuencia',
+                      ),
+                      items: const ['daily', 'weekly', 'monthly']
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(_eventRecurrenceLabel(value)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _eventRecurrenceRuleId = value);
+                      },
+                    ),
+                  ],
+                  SizedBox(height: context.appSpacing.md),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -787,6 +844,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 ? null
                 : _locationController.text.trim(),
             color: _eventColor,
+          isRecurring: _eventIsRecurring,
+          recurrenceRuleId: _eventRecurrenceRuleId,
           );
     } else {
       await ref.read(calendarControllerProvider.notifier).updateEvent(
@@ -801,6 +860,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 ? null
                 : _locationController.text.trim(),
             color: _eventColor,
+          isRecurring: _eventIsRecurring,
+          recurrenceRuleId: _eventRecurrenceRuleId,
           );
     }
 
@@ -819,7 +880,18 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     _end = DateTime.now().add(const Duration(hours: 1));
     _type = EventType.personal;
     _eventColor = '#7EA08B';
+    _eventIsRecurring = false;
+    _eventRecurrenceRuleId = null;
     _editingEvent = null;
+  }
+
+  String _eventRecurrenceLabel(String value) {
+    return switch (value) {
+      'daily' => 'Diaria',
+      'weekly' => 'Semanal',
+      'monthly' => 'Mensual',
+      _ => 'Semanal',
+    };
   }
 
   Color? _parseHexColor(String? value) {

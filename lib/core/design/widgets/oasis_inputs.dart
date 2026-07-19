@@ -22,6 +22,8 @@ class OasisTextField extends StatelessWidget {
     this.expands = false,
     this.textAlignVertical,
     this.onChanged,
+    this.validator,
+    this.errorText,
   });
 
   final TextEditingController? controller;
@@ -39,6 +41,8 @@ class OasisTextField extends StatelessWidget {
   final bool expands;
   final TextAlignVertical? textAlignVertical;
   final ValueChanged<String>? onChanged;
+  final String? Function(String?)? validator;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -55,10 +59,12 @@ class OasisTextField extends StatelessWidget {
       expands: expands,
       textAlignVertical: textAlignVertical,
       onChanged: onChanged,
+      validator: validator,
       style: textTheme.bodyMedium,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
+        errorText: errorText,
         filled: true,
         fillColor: theme.colorScheme.surface,
         prefixIcon: prefixIcon == null ? null : Icon(prefixIcon, size: 20),
@@ -164,8 +170,8 @@ class OasisMultilineField extends StatelessWidget {
       label: label,
       hint: hint,
       onChanged: onChanged,
-      minLines: minLines,
-      maxLines: maxLines ?? minLines,
+      minLines: expands ? null : minLines,
+      maxLines: expands ? null : (maxLines ?? minLines),
       expands: expands,
       textAlignVertical: expands ? TextAlignVertical.top : null,
     );

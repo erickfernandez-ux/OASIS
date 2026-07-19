@@ -63,11 +63,23 @@ class _WellbeingScreenState extends ConsumerState<WellbeingScreen>
       body: state.when(
         data: (wellbeingState) =>
             _buildContent(context, wellbeingState, colors, spacing, typography),
-        loading: () => const Center(
-          child: LoadingIndicator(type: LoadingType.breathingPaper),
+        loading: () => _buildWellbeingScaffoldState(
+          const Center(
+            child: LoadingIndicator(type: LoadingType.breathingPaper),
+          ),
         ),
-        error: (error, _) => Center(child: Text(error.toString())),
+        error: (error, _) => _buildWellbeingScaffoldState(
+          Center(child: Text(error.toString())),
+        ),
       ),
+    );
+  }
+
+  Widget _buildWellbeingScaffoldState(Widget child) {
+    return OasisWatercolorBackground(
+      accent: OasisSurfaces.wellbeingAccent,
+      backgroundAssetOverride: 'assets/backgrounds/amanecer.webp',
+      child: SafeArea(child: child),
     );
   }
 

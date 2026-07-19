@@ -3,8 +3,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
-import 'package:intl/date_symbol_data_local.dart';
 
 import '../../../../core/constants/route_constants.dart';
 import '../../../../core/theme/icons/app_icons.dart';
@@ -13,8 +11,8 @@ import '../../../../core/theme/spacing/app_spacing.dart';
 import '../../../../core/theme/typography/app_typography.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../../core/design/design_system.dart';
+import '../../../../features/settings/domain/entities/user_settings.dart';
 import '../../../../features/settings/presentation/providers/settings_controller.dart';
-import '../../../../shared/providers/app_message_system_provider.dart';
 import '../../../../shared/providers/app_launch_intents.dart';
 import '../../../../shared/widgets/loading_indicator.dart';
 import '../controllers/home_controller.dart';
@@ -25,27 +23,9 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.appColors;
     final spacing = context.appSpacing;
-    final typography = context.appTypography;
-    final now = DateTime.now();
-    final locale = Localizations.localeOf(context).languageCode;
-    final formattedDate = _formatDate(now, locale);
     final dashboardAsync = ref.watch(homeDashboardProvider);
-    final privacyProtected = ref.watch(
-      settingsControllerProvider.select(
-        (state) => state.valueOrNull != null,
-      ),
-    );
-    final preferredName = ref.watch(
-      settingsControllerProvider.select(
-        (state) => state.valueOrNull?.preferredName.trim() ?? '',
-      ),
-    );
-    final greeting = ref.watch(appMessageSystemProvider).greetingFor(
-          now: now,
-          preferredName: preferredName,
-        );
+    final settings = ref.watch(settingsControllerProvider).valueOrNull;
 
     return OasisWatercolorBackground(
       accent: OasisSurfaces.homeAccent,
@@ -57,17 +37,11 @@ class HomeScreen extends ConsumerWidget {
             data: (data) => _buildContent(
               context,
               ref,
-              spacing,
-              typography,
-              colors,
-              formattedDate,
               data,
-              greeting,
-              privacyProtected,
+              settings,
             ),
-            loading: () => _buildLoading(context, spacing, typography, colors),
-            error: (error, _) =>
-                _buildError(context, spacing, typography, colors, error),
+            loading: () => _buildLoading(context),
+            error: (error, _) => _buildError(context, error),
           ),
         ),
       ),
@@ -77,26 +51,14 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildContent(
     BuildContext context,
     WidgetRef ref,
-    AppSpacing spacing,
-    AppTypography typography,
-    AppColors colors,
-    String formattedDate,
     HomeDashboardData data,
-    GreetingMessage greeting,
-    bool privacyProtected,
+    UserSettings? settings,
   ) {
-    final now = DateTime.now();
-    final messageSystem = ref.watch(appMessageSystemProvider);
+    final spacing = context.appSpacing;
+    final typography = context.appTypography;
+    final colors = context.appColors;
+
     final quickActions = <_QuickAction>[
-      _QuickAction(
-          label: 'Nueva tarea',
-          icon: AppIcons.agenda,
-          heroTag: OasisHeroTags.agendaHeader,
-          onPressed: () {
-            ref.read(appLaunchIntentProvider.notifier).state =
-                AppLaunchIntent.openAgendaTasksNewTask;
-            context.go(RouteConstants.agenda);
-          }),
       _QuickAction(
         label: 'Nueva nota',
         icon: AppIcons.notes,
@@ -108,56 +70,43 @@ class HomeScreen extends ConsumerWidget {
         },
       ),
       _QuickAction(
+          label: 'Nueva tarea',
+          icon: AppIcons.agenda,
+        heroTag: null,
+          onPressed: () {
+            ref.read(appLaunchIntentProvider.notifier).state =
+                AppLaunchIntent.openAgendaTasksNewTask;
+            context.go(RouteConstants.agenda);
+          }),
+      _QuickAction(
           label: 'Nueva cita',
           icon: AppIcons.add,
-          heroTag: OasisHeroTags.agendaHeader,
+          heroTag: null,
           onPressed: () {
             ref.read(appLaunchIntentProvider.notifier).state =
                 AppLaunchIntent.openAgendaCalendarNewEvent;
             context.go(RouteConstants.agenda);
           }),
       _QuickAction(
-          label: 'Nuevo registro',
+          label: 'Registrar estado',
           icon: AppIcons.wellbeing,
           heroTag: OasisHeroTags.journalHeader,
           onPressed: () => context.go(RouteConstants.journal)),
     ];
 
-    final summaryItems = <_SummaryItem>[
-      _SummaryItem(
-        title: 'Tareas completadas',
-        value: '${data.completedTasksCount}',
-        subtitle: 'Progreso',
-        detail: '${data.pendingTasksCount} pendientes',
-      ),
-      _SummaryItem(
-        title: 'Agua consumida',
-        value: '${data.waterConsumedMl} ml',
-        subtitle: 'Hidratación',
-        detail: 'Objetivo personal activo',
-      ),
-      _SummaryItem(
-        title: 'Estado de ánimo',
-        value: data.moodLabel,
-        subtitle: 'Último registro',
-        detail: 'Escucha tu energía',
-      ),
-      _SummaryItem(
-        title: 'Sesiones Pomodoro',
-        value: '${data.pomodoroSessions}',
-        subtitle: 'Enfoque',
-        detail: 'Ritmo del día',
-      ),
+    final resumeRows = <_InfoRowData>[
+      if (data.latestNoteLabel != null)
+        _InfoRowData(title: 'Última nota', value: data.latestNoteLabel!),
+      if (data.latestTaskLabel != null)
+        _InfoRowData(title: 'Última tarea', value: data.latestTaskLabel!),
+      if (data.latestJournalLabel != null)
+        _InfoRowData(title: 'Última entrada', value: data.latestJournalLabel!),
+      if (data.pomodoroSessions > 0)
+        _InfoRowData(
+          title: 'Última sesión',
+          value: '${data.pomodoroSessions} sesiones completadas',
+        ),
     ];
-
-    final todayCardMessage = _TodayCardMessage(
-      emoji: data.pendingTasksCount == 0 ? '🍃' : '🌿',
-      message: messageSystem.contextualHomePhrase(
-        now: now,
-        pendingTasksCount: data.pendingTasksCount,
-        journalUsedYesterday: data.journalUsedYesterday,
-      ),
-    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,281 +114,212 @@ class HomeScreen extends ConsumerWidget {
         OasisStagger(
           index: 0,
           child: _buildWelcomeHeader(
+            context: context,
             spacing: spacing,
             typography: typography,
             colors: colors,
-            formattedDate: formattedDate,
-            greeting: greeting,
-              privacyProtected: privacyProtected,
+            settings: settings,
           ),
         ),
         SizedBox(height: spacing.lg),
         OasisStagger(
           index: 1,
           child: _HomePaperCard(
-            padding: EdgeInsets.fromLTRB(
-                spacing.md, spacing.md, spacing.md, spacing.sm),
+            padding: EdgeInsets.all(spacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Hoy',
-                  style: typography.displayLarge
-                      .copyWith(color: colors.semantic.textPrimary),
-                ),
+                _buildSectionTitle(context, '✨ Captura rápida'),
                 SizedBox(height: spacing.sm),
-                _buildTodayRow(
-                  context,
-                  title: 'Tareas pendientes',
-                  value: '${data.pendingTasksCount} por completar',
-                  icon: AppIcons.agenda,
-                ),
-                SizedBox(height: spacing.xs),
-                _buildTodayRow(
-                  context,
-                  title: 'Eventos de hoy',
-                  value: '${data.todayEventsCount} programados',
-                  icon: AppIcons.add,
-                ),
-                SizedBox(height: spacing.xs),
-                _buildTodayRow(
-                  context,
-                  title: 'Próximo medicamento',
-                  value: data.nextMedicationLabel,
-                  icon: AppIcons.info,
-                ),
-                SizedBox(height: spacing.sm),
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(
-                      horizontal: spacing.md, vertical: spacing.sm),
-                  decoration: BoxDecoration(
-                    color: colors.semantic.surface.withValues(alpha: 0.42),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: colors.semantic.primary.withValues(alpha: 0.12),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        todayCardMessage.emoji,
-                        style: const TextStyle(fontSize: 18),
-                      ),
-                      SizedBox(width: spacing.sm),
-                      Expanded(
-                        child: Text(
-                          todayCardMessage.message,
-                          style: typography.body
-                              .copyWith(color: colors.semantic.textSecondary),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: spacing.md),
-                OasisStagger(
-                  index: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Divider(
-                        height: 1,
-                        color: colors.semantic.primary.withValues(alpha: 0.10),
-                      ),
-                      SizedBox(height: spacing.md),
-                      Text(
-                        'Acciones rápidas',
-                        style: typography.title
-                            .copyWith(color: colors.semantic.textPrimary),
-                      ),
-                      SizedBox(height: spacing.xs / 2),
-                      Text(
-                        'Pequeñas herramientas para sostener tu ritmo.',
-                        style: typography.body
-                            .copyWith(color: colors.semantic.textSecondary),
-                      ),
-                      SizedBox(height: spacing.sm),
-                      Divider(
-                        height: 1,
-                        color: colors.semantic.primary.withValues(alpha: 0.10),
-                      ),
-                      SizedBox(height: spacing.sm),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final buttonWidth = constraints.maxWidth >= 840
-                              ? 172.0
-                              : constraints.maxWidth >= 600
-                                  ? 158.0
-                                  : (constraints.maxWidth - spacing.sm) / 2;
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final buttonWidth = constraints.maxWidth >= 840
+                        ? 172.0
+                        : constraints.maxWidth >= 600
+                            ? 158.0
+                            : (constraints.maxWidth - spacing.sm) / 2;
 
-                          return Wrap(
-                            spacing: spacing.sm,
-                            runSpacing: spacing.sm,
-                            children: quickActions
-                                .map(
-                                  (action) => SizedBox(
-                                    width: buttonWidth,
-                                    child: _QuickToolTile(
-                                      label: action.label,
-                                      icon: action.icon,
-                                      heroTag: action.heroTag,
-                                      onTap: action.onPressed,
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: spacing.md),
-                OasisStagger(
-                  index: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Divider(
-                        height: 1,
-                        color: colors.semantic.primary.withValues(alpha: 0.10),
-                      ),
-                      SizedBox(height: spacing.md),
-                      Text(
-                        'Resumen del día',
-                        style: typography.title
-                            .copyWith(color: colors.semantic.textPrimary),
-                      ),
-                      SizedBox(height: spacing.xs / 2),
-                      Text(
-                        'Pequeñas notas para leer tu día de un vistazo.',
-                        style: typography.body
-                            .copyWith(color: colors.semantic.textSecondary),
-                      ),
-                      SizedBox(height: spacing.xs),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          return _SummaryBoard(
-                            spacing: spacing,
-                            children: [
-                              _BoardNote(
-                                icon: Icons.water_drop_rounded,
-                                value: summaryItems[1].value,
-                                label: 'Agua',
-                                caption: summaryItems[1].subtitle,
-                                tint: const Color(0xFF7EB6C8),
+                    return Wrap(
+                      spacing: spacing.sm,
+                      runSpacing: spacing.sm,
+                      children: quickActions
+                          .map(
+                            (action) => SizedBox(
+                              width: buttonWidth,
+                              child: _QuickToolTile(
+                                label: action.label,
+                                icon: action.icon,
+                                heroTag: action.heroTag,
+                                onTap: action.onPressed,
                               ),
-                              _BoardNote(
-                                icon: Icons.mood_rounded,
-                                value: summaryItems[2].value,
-                                label: 'Mood',
-                                caption: summaryItems[2].subtitle,
-                                tint: const Color(0xFFD39B69),
-                              ),
-                              _BoardNote(
-                                icon: Icons.timer_rounded,
-                                value: summaryItems[3].value,
-                                label: 'Focus',
-                                caption: summaryItems[3].subtitle,
-                                tint: const Color(0xFF8CA77B),
-                              ),
-                              _BoardNote(
-                                icon: Icons.check_circle_rounded,
-                                value: summaryItems[0].value,
-                                label: 'Prog.',
-                                caption: summaryItems[0].subtitle,
-                                tint: const Color(0xFFB79BB7),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
                 ),
               ],
             ),
           ),
         ),
-        SizedBox(height: spacing.lg),
+        if (resumeRows.isNotEmpty) ...[
+          SizedBox(height: spacing.md),
+          OasisStagger(
+            index: 2,
+            child: _HomePaperCard(
+              padding: EdgeInsets.all(spacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle(context, 'Continúa donde quedaste'),
+                  SizedBox(height: spacing.sm),
+                  ...resumeRows
+                      .map((item) => Padding(
+                            padding: EdgeInsets.only(bottom: spacing.xs),
+                            child: _buildInfoRow(
+                              context,
+                              title: item.title,
+                              value: item.value,
+                              icon: AppIcons.info,
+                            ),
+                          )),
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (data.priorityTask != null) ...[
+          SizedBox(height: spacing.md),
+          OasisStagger(
+            index: 3,
+            child: _HomePaperCard(
+              level: 3,
+              padding: EdgeInsets.all(spacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle(context, 'Prioridad del día'),
+                  SizedBox(height: spacing.sm),
+                  _buildInfoRow(
+                    context,
+                    title: data.priorityTask!.title,
+                    value: [
+                      if (data.priorityTask!.timeLabel != null)
+                        data.priorityTask!.timeLabel!,
+                      data.priorityTask!.priorityLabel,
+                    ].join(' • '),
+                    icon: AppIcons.agenda,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        SizedBox(height: spacing.md),
         OasisStagger(
           index: 4,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const OasisSectionHeader(
-                title: 'Próximas tareas',
-                subtitle: 'Tu agenda más cercana, lista para mover',
-              ),
-              SizedBox(height: spacing.xs),
-              const OasisDivider(),
-              SizedBox(height: spacing.sm),
-              if (data.upcomingTasks.isEmpty)
-                OasisEmptyState(
-                  icon: AppIcons.agenda,
-                  title: 'Hoy tienes un poco mas de espacio para respirar.',
-                  description: messageSystem
-                      .emptyStateFor(AppEmptyMessageKey.homeUpcomingTasks),
-                )
-              else
-                ...data.upcomingTasks.asMap().entries.map(
-                      (entry) => Padding(
-                        padding: EdgeInsets.only(bottom: spacing.sm),
-                        child: OasisStagger(
-                          index: entry.key,
-                          child: _HomePaperCard(
-                            level: 2,
-                            padding: EdgeInsets.all(spacing.md),
-                            onTap: () {},
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 34,
-                                  height: 34,
-                                  decoration: BoxDecoration(
-                                    color: colors.semantic.primary
-                                        .withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    AppIcons.agenda,
-                                    size: AppIconSize.md.value,
-                                    color: colors.semantic.primary,
-                                  ),
-                                ),
-                                SizedBox(width: spacing.md),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        entry.value.title,
-                                        style: typography.label.copyWith(
-                                            color: colors.semantic.textPrimary),
-                                      ),
-                                      SizedBox(height: spacing.xs / 2),
-                                      Text(
-                                        [
-                                          if (entry.value.timeLabel != null)
-                                            entry.value.timeLabel,
-                                          entry.value.priorityLabel,
-                                          entry.value.statusLabel,
-                                        ].join(' • '),
-                                        style: typography.body.copyWith(
-                                            color: colors.semantic.textSecondary),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+          child: _HomePaperCard(
+            padding: EdgeInsets.all(spacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSectionTitle(context, 'Medicación'),
+                SizedBox(height: spacing.sm),
+                if (data.nextMedicationName != null)
+                  _buildInfoRow(
+                    context,
+                    title: data.nextMedicationName!,
+                    value: [
+                      if (data.nextMedicationDoseLabel != null)
+                        data.nextMedicationDoseLabel!,
+                      if (data.nextMedicationTimeLabel != null)
+                        data.nextMedicationTimeLabel!,
+                      if (data.nextMedicationStatusLabel != null)
+                        data.nextMedicationStatusLabel!,
+                    ].join(' • '),
+                    icon: AppIcons.wellbeing,
+                  )
+                else
+                  Text(
+                    'Sin medicación activa',
+                    style: typography.body
+                        .copyWith(color: colors.semantic.textSecondary),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: spacing.md),
+        OasisStagger(
+          index: 5,
+          child: _HomePaperCard(
+            padding: EdgeInsets.all(spacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSectionTitle(context, 'Agenda del día'),
+                SizedBox(height: spacing.sm),
+                if (data.todayEvents.isNotEmpty)
+                  ...data.todayEvents
+                      .map((event) => Padding(
+                            padding: EdgeInsets.only(bottom: spacing.xs),
+                            child: _buildInfoRow(
+                              context,
+                              title: event.title,
+                              value: event.timeLabel,
+                              icon: AppIcons.add,
                             ),
-                          ),
-                        ),
-                      ),
-                    ),
-            ],
+                          ))
+                else
+                  Text(
+                    'Sin eventos para hoy',
+                    style: typography.body
+                        .copyWith(color: colors.semantic.textSecondary),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: spacing.md),
+        OasisStagger(
+          index: 6,
+          child: _HomePaperCard(
+            padding: EdgeInsets.all(spacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSectionTitle(context, 'Hidratación'),
+                SizedBox(height: spacing.sm),
+                _buildInfoRow(
+                  context,
+                  title: '${data.waterConsumedMl} ml hoy',
+                  value: 'Registro real de consumo',
+                  icon: AppIcons.info,
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: spacing.md),
+        OasisStagger(
+          index: 7,
+          child: _HomePaperCard(
+            padding: EdgeInsets.all(spacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSectionTitle(context, 'Estado emocional'),
+                SizedBox(height: spacing.sm),
+                _buildInfoRow(
+                  context,
+                  title: data.moodLabel,
+                  value: data.energyLabel != null
+                      ? 'Energía ${data.energyLabel}'
+                      : 'Último registro emocional',
+                  icon: AppIcons.wellbeing,
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -447,17 +327,15 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildWelcomeHeader({
+    required BuildContext context,
     required AppSpacing spacing,
     required AppTypography typography,
     required AppColors colors,
-    required String formattedDate,
-    required GreetingMessage greeting,
-    required bool privacyProtected,
+    required UserSettings? settings,
   }) {
     return Container(
       width: double.infinity,
-      padding:
-          EdgeInsets.fromLTRB(spacing.sm, spacing.sm, spacing.sm, spacing.md),
+      padding: EdgeInsets.fromLTRB(spacing.md, spacing.md, spacing.md, spacing.md),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -474,61 +352,138 @@ class HomeScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Image.asset(
-            'assets/logos/oasis_logo.png',
-            height: 42,
-            fit: BoxFit.contain,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '🌿 Buenos días, Erick',
+                      style: typography.displayLarge
+                          .copyWith(color: colors.semantic.textPrimary),
+                    ),
+                    SizedBox(height: spacing.xs / 2),
+                    Text(
+                      'Hoy parece un buen día para ir con calma.',
+                      style: typography.body
+                          .copyWith(color: colors.semantic.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              _LiftOnTouch(
+                onTap: () => _showPrivacyInfo(context, settings),
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: colors.semantic.surface.withValues(alpha: 0.38),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: colors.semantic.primary.withValues(alpha: 0.14),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.lock_outline_rounded,
+                    size: 18,
+                    color: colors.semantic.textSecondary,
+                  ),
+                ),
+              ),
+            ],
           ),
-          SizedBox(height: spacing.sm),
-          Text(
-            greeting.title,
-            style: typography.displayLarge
-                .copyWith(color: colors.semantic.textPrimary),
-          ),
-          SizedBox(height: spacing.xs / 2),
-          TweenAnimationBuilder<double>(
-            duration: MotionSpec.selectionFade,
-            curve: MotionSpec.easeInOut,
-            tween: Tween(begin: 0, end: 1),
-            builder: (context, value, child) {
-              return Opacity(
-                opacity: value,
-                child: child,
-              );
-            },
-            child: Text(
-              greeting.subtitle,
-              style: typography.body
-                  .copyWith(color: colors.semantic.textSecondary),
+        ],
+      ),
+    );
+  }
+
+  void _showPrivacyInfo(BuildContext context, UserSettings? settings) {
+    final colors = context.appColors;
+    final typography = context.appTypography;
+    final spacing = context.appSpacing;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.all(spacing.md),
+          child: _HomePaperCard(
+            level: 3,
+            padding: EdgeInsets.all(spacing.md),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Privacidad',
+                  style: typography.title
+                      .copyWith(color: colors.semantic.textPrimary),
+                ),
+                SizedBox(height: spacing.sm),
+                _buildPrivacyLine(
+                  context,
+                  label: 'Bloqueo de app',
+                  value: (settings?.privacyLockEnabled ?? false)
+                      ? 'Activo'
+                      : 'Inactivo',
+                ),
+                _buildPrivacyLine(
+                  context,
+                  label: 'PIN',
+                  value: (settings?.privacyUsePin ?? false)
+                      ? 'Activo'
+                      : 'Inactivo',
+                ),
+                _buildPrivacyLine(
+                  context,
+                  label: 'Biometría',
+                  value: (settings?.privacyUseBiometric ?? false)
+                      ? 'Activa'
+                      : 'Inactiva',
+                ),
+                _buildPrivacyLine(
+                  context,
+                  label: 'Ocultar en recientes',
+                  value: (settings?.privacyHideInRecents ?? false)
+                      ? 'Activo'
+                      : 'Inactivo',
+                ),
+              ],
             ),
           ),
-          SizedBox(height: spacing.xs / 2),
-          Text(
-            formattedDate,
-            style:
-                typography.body.copyWith(color: colors.semantic.textSecondary),
+        );
+      },
+    );
+  }
+
+  Widget _buildPrivacyLine(
+    BuildContext context, {
+    required String label,
+    required String value,
+  }) {
+    final typography = context.appTypography;
+    final colors = context.appColors;
+    final spacing = context.appSpacing;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: spacing.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: typography.body.copyWith(
+                color: colors.semantic.textSecondary,
+              ),
+            ),
           ),
-          SizedBox(height: spacing.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: spacing.sm,
-                vertical: spacing.xs,
-              ),
-              decoration: BoxDecoration(
-                color: colors.semantic.surface.withValues(alpha: 0.42),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: colors.semantic.primary.withValues(alpha: 0.16),
-                ),
-              ),
-              child: Text(
-                privacyProtected ? '🔒 Datos cifrados' : '🛡 Privacidad protegida',
-                style: typography.label.copyWith(
-                  color: colors.semantic.textSecondary,
-                ),
-              ),
+          Text(
+            value,
+            style: typography.label.copyWith(
+              color: colors.semantic.textPrimary,
             ),
           ),
         ],
@@ -536,19 +491,16 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildLoading(
-    BuildContext context,
-    AppSpacing spacing,
-    AppTypography typography,
-    AppColors colors,
-  ) {
+  Widget _buildLoading(BuildContext context) {
+    final spacing = context.appSpacing;
+    final typography = context.appTypography;
+    final colors = context.appColors;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          const AppMessageSystem()
-            .greetingFor(now: DateTime.now(), preferredName: '')
-            .title,
+          '🌿 Buenos días, Erick',
           style: typography.displayLarge
               .copyWith(color: colors.semantic.textPrimary),
         ),
@@ -568,13 +520,11 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildError(
-    BuildContext context,
-    AppSpacing spacing,
-    AppTypography typography,
-    AppColors colors,
-    Object error,
-  ) {
+  Widget _buildError(BuildContext context, Object error) {
+    final spacing = context.appSpacing;
+    final typography = context.appTypography;
+    final colors = context.appColors;
+
     return OasisCard(
       padding: EdgeInsets.all(spacing.lg),
       child: Column(
@@ -596,16 +546,16 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  String _formatDate(DateTime date, String locale) {
-    try {
-      initializeDateFormatting(locale);
-      return DateFormat('EEEE, d MMMM', locale).format(date);
-    } catch (_) {
-      return DateFormat('EEEE, d MMMM', 'en').format(date);
-    }
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    final typography = context.appTypography;
+    final colors = context.appColors;
+    return Text(
+      title,
+      style: typography.title.copyWith(color: colors.semantic.textPrimary),
+    );
   }
 
-  Widget _buildTodayRow(
+  Widget _buildInfoRow(
     BuildContext context, {
     required String title,
     required String value,
@@ -661,191 +611,11 @@ class _QuickAction {
       this.heroTag});
 }
 
-class _SummaryItem {
+class _InfoRowData {
   final String title;
   final String value;
-  final String subtitle;
-  final String detail;
 
-  const _SummaryItem({
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.detail,
-  });
-}
-
-class _TodayCardMessage {
-  final String emoji;
-  final String message;
-
-  const _TodayCardMessage({required this.emoji, required this.message});
-}
-
-class _BoardNote extends StatelessWidget {
-  const _BoardNote({
-    required this.icon,
-    required this.value,
-    required this.label,
-    required this.caption,
-    required this.tint,
-  });
-
-  final IconData icon;
-  final String value;
-  final String label;
-  final String caption;
-  final Color tint;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final typography = context.appTypography;
-
-    return AspectRatio(
-      aspectRatio: 1.18,
-      child: _LiftOnTouch(
-        onTap: () {},
-        child: Transform.rotate(
-          angle: 0.012,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(11, 10, 11, 9),
-                decoration: BoxDecoration(
-                  color: (Theme.of(context).brightness == Brightness.dark
-                          ? const Color(0xFF312B28)
-                          : const Color(0xFFFFFBF2))
-                      .withValues(alpha: 0.84),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.42),
-                    width: 0.8,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: tint.withValues(alpha: 0.10),
-                      blurRadius: 18,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: tint.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            icon,
-                            size: AppIconSize.md.value,
-                            color: tint,
-                          ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          width: 18,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: tint.withValues(alpha: 0.22),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: typography.label.copyWith(
-                        color: colors.semantic.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: typography.caption.copyWith(
-                        color: colors.semantic.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      caption,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: typography.caption.copyWith(
-                        color: colors.semantic.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryBoard extends StatelessWidget {
-  const _SummaryBoard({required this.spacing, required this.children});
-
-  final AppSpacing spacing;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(26),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: EdgeInsets.all(spacing.sm),
-          decoration: BoxDecoration(
-            color: (Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF2F2926)
-                    : const Color(0xFFFFFAF2))
-                .withValues(alpha: 0.54),
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.32),
-              width: 0.8,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: colors.semantic.primary.withValues(alpha: 0.06),
-                blurRadius: 22,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          ),
-          child: GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: spacing.xs,
-            crossAxisSpacing: spacing.xs,
-            childAspectRatio: 1.28,
-            children: children,
-          ),
-        ),
-      ),
-    );
-  }
+  const _InfoRowData({required this.title, required this.value});
 }
 
 class _QuickToolTile extends StatelessWidget {
@@ -920,13 +690,11 @@ class _HomePaperCard extends StatelessWidget {
     required this.child,
     required this.padding,
     this.level = 2,
-    this.onTap,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final int level;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -997,7 +765,7 @@ class _HomePaperCard extends StatelessWidget {
       ),
     );
 
-    return _LiftOnTouch(onTap: onTap, child: panel);
+    return panel;
   }
 }
 

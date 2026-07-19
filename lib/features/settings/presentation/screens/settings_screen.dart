@@ -465,7 +465,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 await PrivacyPinService.savePin(first);
                 if (!mounted || !dialogContext.mounted) return;
                 Navigator.pop(dialogContext);
-                setState(() {});
                 _showSnackBar('PIN guardado.');
               },
               child: const Text('Guardar'),
@@ -530,24 +529,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   return;
                 }
                 setState(() => _deletingData = true);
-                await PrivacyDataService.wipeAllUserData();
-                await ref
-                    .read(settingsControllerProvider.notifier)
-                    .saveSettings(const UserSettings());
-                await ref.read(medicationsControllerProvider.notifier).refresh();
-                if (!mounted || !dialogContext.mounted) return;
-                setState(() {
-                  _rituals = defaultRituals();
-                  _quietHours = defaultQuietHours;
-                  _medicationCriticalInQuietHours =
-                      defaultMedicationCriticalInQuietHours;
-                  _ritualsLoaded = true;
-                });
-                _refreshPrivacyStats();
-                Navigator.pop(dialogContext);
-                _showSnackBar('Tus datos locales fueron eliminados.');
-                if (mounted) {
-                  setState(() => _deletingData = false);
+                try {
+                  await PrivacyDataService.wipeAllUserData();
+                  await ref
+                      .read(settingsControllerProvider.notifier)
+                      .saveSettings(const UserSettings());
+                  await ref.read(medicationsControllerProvider.notifier).refresh();
+                  if (!mounted || !dialogContext.mounted) return;
+                  setState(() {
+                    _rituals = defaultRituals();
+                    _quietHours = defaultQuietHours;
+                    _medicationCriticalInQuietHours =
+                        defaultMedicationCriticalInQuietHours;
+                    _ritualsLoaded = true;
+                  });
+                  _refreshPrivacyStats();
+                  Navigator.pop(dialogContext);
+                  _showSnackBar('Tus datos locales fueron eliminados.');
+                } finally {
+                  if (mounted) {
+                    setState(() => _deletingData = false);
+                  }
                 }
               },
               child: const Text('Eliminar'),
@@ -1496,6 +1498,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _openNameDialog(BuildContext context, UserSettings settings) async {
     final controller = TextEditingController(text: settings.preferredName);
+    final formKey = GlobalKey<FormState>();
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -1514,6 +1517,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   onPressed: _savingName
                       ? null
                       : () async {
+                          final isValid = formKey.currentState?.validate() ?? true;
+                          if (!isValid) {
+                            return;
+                          }
+
                           if (!mounted) return;
                           setState(() => _savingName = true);
                           setDialogState(() {});
@@ -1538,9 +1546,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   child: Text(_savingName ? 'Guardando...' : 'Guardar'),
                 ),
               ],
-              child: AppTextField(
-                controller: controller,
-                hint: 'Escribe cómo prefieres que OASIS te acompañe',
+              child: Form(
+                key: formKey,
+                child: AppTextField(
+                  controller: controller,
+                  hint: 'Escribe cómo prefieres que OASIS te acompañe',
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Escribe un nombre o deja el campo vacío para ocultarlo.';
+                    }
+                    return null;
+                  },
+                ),
               ),
             );
           },

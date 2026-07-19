@@ -15,6 +15,8 @@ class CreateEvent {
     bool allDay = false,
     String? location,
     String? color,
+    bool isRecurring = false,
+    String? recurrenceRuleId,
   }) async {
     final event = Event(
       id: '', // Assigned by repository
@@ -25,6 +27,8 @@ class CreateEvent {
       allDay: allDay,
       location: location,
       color: color,
+      isRecurring: isRecurring,
+      recurrenceRuleId: recurrenceRuleId,
       createdAt: DateTime.now(),
     );
     return _repository.createEvent(event);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import '../../../../core/di/usecase_providers.dart';
 import '../../../../core/design/design_system.dart';
@@ -20,10 +21,15 @@ import '../../../calendar/presentation/providers/calendar_controller.dart';
 import '../../domain/entities/task.dart';
 import '../../domain/enums/task_status.dart';
 import '../providers/agenda_controller.dart';
+import '../../../reminders/domain/entities/reminder.dart';
+import '../../../reminders/domain/enums/reminder_repeat.dart';
+import '../../../reminders/presentation/providers/reminders_controller.dart';
 
 enum _AgendaTab { calendar, tasks, reminders }
 
 enum _EventRepeatPattern { none, daily, weekly, monthly }
+
+const _eventRecurrenceOptions = <String>['daily', 'weekly', 'monthly'];
 
 class _AgendaFutureIntegrations {
   const _AgendaFutureIntegrations._();
@@ -67,12 +73,19 @@ class AgendaScreen extends ConsumerStatefulWidget {
 
 class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   _AgendaTab _activeTab = _AgendaTab.calendar;
+  bool _dateLocaleReady = false;
 
   final _taskTitleController = TextEditingController();
   final _taskDescriptionController = TextEditingController();
   final _taskDueDateController = TextEditingController();
   DateTime? _taskDueDate;
   Task? _editingTask;
+
+  final _reminderTitleController = TextEditingController();
+  final _reminderDateTimeController = TextEditingController();
+  DateTime? _reminderDateTime;
+  ReminderRepeat _reminderRepeatRule = ReminderRepeat.once;
+  Reminder? _editingReminder;
 
   final _eventTitleController = TextEditingController();
   final _eventDescriptionController = TextEditingController();
@@ -82,6 +95,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   DateTime _eventStart = DateTime.now();
   DateTime _eventEnd = DateTime.now().add(const Duration(hours: 1));
   String _eventColor = '#7EA08B';
+  bool _eventIsRecurring = false;
+  String? _eventRecurrenceRuleId;
   Event? _editingEvent;
 
   static const Map<String, Color> _palette = {
@@ -99,6 +114,25 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       if (!mounted) return;
       _consumeLaunchIntent();
     });
+    _initializeDateLocale();
+  }
+
+  Future<void> _initializeDateLocale() async {
+    final locale = WidgetsBinding.instance.platformDispatcher.locale;
+
+    try {
+      await initializeDateFormatting(locale.toString());
+    } catch (_) {
+      await initializeDateFormatting(locale.languageCode);
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _dateLocaleReady = true;
+    });
   }
 
   @override
@@ -106,6 +140,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     _taskTitleController.dispose();
     _taskDescriptionController.dispose();
     _taskDueDateController.dispose();
+    _reminderTitleController.dispose();
+    _reminderDateTimeController.dispose();
     _eventTitleController.dispose();
     _eventDescriptionController.dispose();
     _eventLocationController.dispose();
@@ -123,6 +159,13 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       return;
     }
 
+    if (intent == AppLaunchIntent.openAgendaRemindersNewReminder) {
+      setState(() => _activeTab = _AgendaTab.reminders);
+      ref.read(appLaunchIntentProvider.notifier).state = null;
+      _showReminderDialog();
+      return;
+    }
+
     if (intent == AppLaunchIntent.openAgendaCalendarNewEvent ||
         intent == AppLaunchIntent.openCalendarNewEvent) {
       setState(() => _activeTab = _AgendaTab.calendar);
@@ -137,6 +180,21 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     final spacing = context.appSpacing;
     final typography = context.appTypography;
     final messageSystem = ref.watch(appMessageSystemProvider);
+    final remindersState = ref.watch(remindersControllerProvider);
+
+    if (!_dateLocaleReady) {
+      return const Scaffold(
+        backgroundColor: Colors.transparent,
+        body: OasisWatercolorBackground(
+          accent: OasisSurfaces.calendarAccent,
+          child: SafeArea(
+            child: Center(
+              child: LoadingIndicator(type: LoadingType.breathingPaper),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -211,6 +269,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                                   spacing,
                                   typography,
                                   messageSystem,
+                                  remindersState,
                                 ),
                             },
                           ),
@@ -330,7 +389,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
               Row(
                 children: [
                   Text(
-                    DateFormat('EEEE, d MMM', 'es_ES').format(state.selectedDay),
+                    DateFormat('EEEE, d MMM').format(state.selectedDay),
                     style: typography.title
                         .copyWith(color: colors.semantic.textPrimary),
                   ),
@@ -478,7 +537,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    DateFormat('MMMM yyyy', 'es_ES').format(state.selectedDay),
+                    DateFormat('MMMM yyyy').format(state.selectedDay),
                     style: typography.title
                         .copyWith(color: colors.semantic.textPrimary),
                   ),
@@ -752,27 +811,114 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     AppSpacing spacing,
     AppTypography typography,
     AppMessageSystem messageSystem,
+    AsyncValue<List<Reminder>> remindersState,
   ) {
-    return OasisCard(
-      padding: EdgeInsets.all(spacing.lg),
-      child: Center(
-        child: Column(
+    return remindersState.when(
+      data: (reminders) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '🔔',
-              style: typography.displayMedium,
-            ),
-            SizedBox(height: spacing.sm),
-            Text(
-              messageSystem.emptyStateFor(AppEmptyMessageKey.agendaReminders),
-              textAlign: TextAlign.center,
-              style: typography.body.copyWith(
-                color: colors.semantic.textSecondary,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: _showReminderDialog,
+                icon: const Icon(AppIcons.add),
+                label: const Text('Crear recordatorio'),
               ),
             ),
+            SizedBox(height: spacing.md),
+            if (reminders.isEmpty)
+              OasisCard(
+                padding: EdgeInsets.all(spacing.lg),
+                child: Column(
+                  children: [
+                    Text(
+                      '🔔',
+                      style: typography.displayMedium,
+                    ),
+                    SizedBox(height: spacing.sm),
+                    Text(
+                      'Todavía no tienes recordatorios.',
+                      textAlign: TextAlign.center,
+                      style: typography.body.copyWith(
+                        color: colors.semantic.textSecondary,
+                      ),
+                    ),
+                    SizedBox(height: spacing.md),
+                    FilledButton(
+                      onPressed: _showReminderDialog,
+                      child: const Text('Crear recordatorio'),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Column(
+                children: reminders.map((reminder) {
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: spacing.sm),
+                    child: OasisCard(
+                      padding: EdgeInsets.all(spacing.md),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  reminder.title,
+                                  style: typography.body.copyWith(
+                                    color: colors.semantic.textPrimary,
+                                  ),
+                                ),
+                                SizedBox(height: spacing.xs),
+                                Text(
+                                  DateFormat('dd/MM/yyyy HH:mm')
+                                      .format(reminder.dateTime),
+                                  style: typography.label.copyWith(
+                                    color: colors.semantic.textSecondary,
+                                  ),
+                                ),
+                                SizedBox(height: spacing.xs / 2),
+                                Text(
+                                  _reminderRepeatLabel(reminder.repeatRule),
+                                  style: typography.label.copyWith(
+                                    color: colors.semantic.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Editar recordatorio',
+                            onPressed: () => _showReminderDialog(
+                              reminder: reminder,
+                            ),
+                            icon: const Icon(AppIcons.edit),
+                          ),
+                          IconButton(
+                            tooltip: 'Eliminar recordatorio',
+                            onPressed: () async {
+                              await ref
+                                  .read(remindersControllerProvider.notifier)
+                                  .deleteReminder(reminder.id);
+                            },
+                            icon: const Icon(AppIcons.delete),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
           ],
-        ),
+        );
+      },
+      loading: () => const Center(
+        child: LoadingIndicator(type: LoadingType.breathingPaper),
       ),
+      error: (error, _) => Text(error.toString()),
     );
   }
 
@@ -844,6 +990,205 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Se quitaron ${events.length} ejemplos de eventos.')),
     );
+  }
+
+  void _showReminderDialog({Reminder? reminder}) {
+    _editingReminder = reminder;
+    _reminderTitleController.text = reminder?.title ?? '';
+    _reminderDateTime = reminder?.dateTime ?? DateTime.now().add(const Duration(hours: 1));
+    _reminderDateTimeController.text = DateFormat('dd/MM/yyyy HH:mm').format(_reminderDateTime!);
+    _reminderRepeatRule = reminder?.repeatRule ?? ReminderRepeat.once;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            await _attemptCloseReminderDialog(dialogContext);
+          },
+          child: AppDialog(
+            title: reminder == null ? 'Crear recordatorio' : 'Editar recordatorio',
+            actions: [
+              TextButton(
+                onPressed: () => _attemptCloseReminderDialog(dialogContext),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => _saveReminder(dialogContext),
+                child: const Text('Guardar'),
+              ),
+            ],
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppTextField(
+                    controller: _reminderTitleController,
+                    label: 'Título',
+                    hint: 'Tomar medicina',
+                  ),
+                  SizedBox(height: context.appSpacing.md),
+                  AppTextField(
+                    controller: _reminderDateTimeController,
+                    label: 'Fecha y hora',
+                    readOnly: true,
+                    hint: 'Seleccionar',
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: _reminderDateTime ?? DateTime.now(),
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate: DateTime.now().add(const Duration(days: 3650)),
+                      );
+                      if (date == null || !mounted || !dialogContext.mounted) {
+                        return;
+                      }
+                      final time = await showTimePicker(
+                        context: dialogContext,
+                        initialTime: TimeOfDay.fromDateTime(_reminderDateTime ?? DateTime.now()),
+                      );
+                      if (time == null || !mounted || !dialogContext.mounted) {
+                        return;
+                      }
+                      setState(() {
+                        _reminderDateTime = DateTime(
+                          date.year,
+                          date.month,
+                          date.day,
+                          time.hour,
+                          time.minute,
+                        );
+                        _reminderDateTimeController.text =
+                            DateFormat('dd/MM/yyyy HH:mm').format(_reminderDateTime!);
+                      });
+                    },
+                  ),
+                  SizedBox(height: context.appSpacing.md),
+                  DropdownButtonFormField<ReminderRepeat>(
+                    initialValue: _reminderRepeatRule,
+                    decoration: const InputDecoration(
+                      labelText: 'Repetición',
+                    ),
+                    items: ReminderRepeat.values
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(_reminderRepeatLabel(value)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _reminderRepeatRule = value);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  bool _hasReminderDraftChanges() {
+    return _reminderTitleController.text.trim().isNotEmpty ||
+        _reminderDateTime != null;
+  }
+
+  Future<void> _attemptCloseReminderDialog(BuildContext dialogContext) async {
+    if (!_hasReminderDraftChanges()) {
+      if (dialogContext.mounted) {
+        Navigator.pop(dialogContext);
+      }
+      _clearReminderForm();
+      return;
+    }
+
+    final action = await showDialog<String>(
+      context: dialogContext,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Qué quieres hacer con los cambios?'),
+        content: const Text('Puedes guardar, descartar o seguir editando.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'cancel'),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'discard'),
+            child: const Text('Descartar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, 'save'),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || !dialogContext.mounted) {
+      return;
+    }
+
+    if (action == 'save') {
+      await _saveReminder(dialogContext);
+      return;
+    }
+
+    if (action == 'discard') {
+      if (dialogContext.mounted) {
+        Navigator.pop(dialogContext);
+      }
+      _clearReminderForm();
+    }
+  }
+
+  Future<void> _saveReminder(BuildContext dialogContext) async {
+    final title = _reminderTitleController.text.trim();
+    final dateTime = _reminderDateTime;
+    if (title.isEmpty || dateTime == null) return;
+
+    if (_editingReminder == null) {
+      await ref.read(remindersControllerProvider.notifier).createReminder(
+            title: title,
+            dateTime: dateTime,
+            repeatRule: _reminderRepeatRule,
+          );
+    } else {
+      await ref.read(remindersControllerProvider.notifier).updateReminder(
+            _editingReminder!.copyWith(
+              title: title,
+              dateTime: dateTime,
+              repeatRule: _reminderRepeatRule,
+            ),
+          );
+    }
+
+    if (!mounted || !dialogContext.mounted) return;
+    Navigator.pop(dialogContext);
+    _clearReminderForm();
+  }
+
+  void _clearReminderForm() {
+    _reminderTitleController.clear();
+    _reminderDateTimeController.clear();
+    _reminderDateTime = null;
+    _reminderRepeatRule = ReminderRepeat.once;
+    _editingReminder = null;
+  }
+
+  String _reminderRepeatLabel(ReminderRepeat repeatRule) {
+    return switch (repeatRule) {
+      ReminderRepeat.once => 'Una sola vez',
+      ReminderRepeat.daily => 'Diario',
+      ReminderRepeat.weekly => 'Semanal',
+      ReminderRepeat.monthly => 'Mensual',
+      ReminderRepeat.custom => 'Personalizado',
+    };
   }
 
   void _showTaskDialog({Task? task}) {
@@ -1022,6 +1367,11 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     _eventStartController.text = DateFormat('dd/MM/yyyy HH:mm').format(_eventStart);
     _eventEndController.text = DateFormat('dd/MM/yyyy HH:mm').format(_eventEnd);
     _eventColor = event?.color ?? '#7EA08B';
+    _eventIsRecurring = event?.isRecurring ?? false;
+    _eventRecurrenceRuleId = event?.recurrenceRuleId ?? 'weekly';
+    if (!_eventIsRecurring) {
+      _eventRecurrenceRuleId = null;
+    }
 
     showDialog(
       context: context,
@@ -1171,6 +1521,44 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                     ],
                   ),
                   SizedBox(height: context.appSpacing.md),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: _eventIsRecurring,
+                    title: const Text('Repetir evento'),
+                    subtitle: const Text('Activa una frecuencia fija para este evento'),
+                    onChanged: (value) {
+                      setState(() {
+                        _eventIsRecurring = value;
+                        if (!_eventIsRecurring) {
+                          _eventRecurrenceRuleId = null;
+                        } else {
+                          _eventRecurrenceRuleId ??= 'weekly';
+                        }
+                      });
+                    },
+                  ),
+                  if (_eventIsRecurring) ...[
+                    SizedBox(height: context.appSpacing.xs),
+                    DropdownButtonFormField<String>(
+                        initialValue: _eventRecurrenceRuleId ?? 'weekly',
+                      decoration: const InputDecoration(
+                        labelText: 'Frecuencia',
+                      ),
+                      items: _eventRecurrenceOptions
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(_eventRecurrenceLabel(value)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _eventRecurrenceRuleId = value);
+                      },
+                    ),
+                  ],
+                  SizedBox(height: context.appSpacing.md),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -1282,6 +1670,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             description: description.isEmpty ? null : description,
             location: location.isEmpty ? null : location,
             color: _eventColor,
+        isRecurring: _eventIsRecurring,
+        recurrenceRuleId: _eventRecurrenceRuleId,
           );
     } else {
       await ref.read(calendarControllerProvider.notifier).updateEvent(
@@ -1292,6 +1682,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             endDateTime: _eventEnd,
             location: location.isEmpty ? null : location,
             color: _eventColor,
+        isRecurring: _eventIsRecurring,
+        recurrenceRuleId: _eventRecurrenceRuleId,
           );
     }
 
@@ -1309,7 +1701,18 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     _eventStart = DateTime.now();
     _eventEnd = DateTime.now().add(const Duration(hours: 1));
     _eventColor = '#7EA08B';
+    _eventIsRecurring = false;
+    _eventRecurrenceRuleId = null;
     _editingEvent = null;
+  }
+
+  String _eventRecurrenceLabel(String value) {
+    return switch (value) {
+      'daily' => 'Diaria',
+      'weekly' => 'Semanal',
+      'monthly' => 'Mensual',
+      _ => 'Semanal',
+    };
   }
 
   Color? _parseHexColor(String? value) {

@@ -92,14 +92,17 @@ class _RitualsScreenState extends ConsumerState<RitualsScreen> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
-                    Switch(
-                      value: _quietHours.enabled,
-                      onChanged: (value) {
-                        setState(() {
-                          _quietHours = _quietHours.copyWith(enabled: value);
-                        });
-                        _persistState();
-                      },
+                    Material(
+                      type: MaterialType.transparency,
+                      child: Switch(
+                        value: _quietHours.enabled,
+                        onChanged: (value) {
+                          setState(() {
+                            _quietHours = _quietHours.copyWith(enabled: value);
+                          });
+                          _persistState();
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -295,9 +298,12 @@ class _RitualTile extends StatelessWidget {
               ],
             ),
           ),
-          Switch(
-            value: ritual.enabled,
-            onChanged: onToggle,
+          Material(
+            type: MaterialType.transparency,
+            child: Switch(
+              value: ritual.enabled,
+              onChanged: onToggle,
+            ),
           ),
         ],
       ),
